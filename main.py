@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, request, abort
-# from models import Advertisement, Session
+from models import Advertisement, Session
 
 app = Flask(__name__)
 
@@ -9,42 +9,76 @@ ads_database = {}
 def create_ad():
     data = request.json
 
-    ad_id = len(ads_database) + 1
+    new_ad = Advertisement(
+        title=data['title'],
+        description=data['description'],
+        creation_date=data['creation_date'],
+        owner=data['owner']
+    )
 
-    ads_database[ad_id] = {
-        'title': data['title'],
-        'description': data['description'],
-        'creation_date': data['creation_date'],
-        'owner': data['owner']
-    }
-    return jsonify({'id': ad_id}), 201
+    session = Session()
+    session.add(new_ad)
+    session.commit()
+
+    return jsonify({'id': new_ad.id}), 201
 
 @app.route('/ad/<int:ad_id>', methods=['GET'])
 def get_ad(ad_id):
-    ad = ads_database.get(ad_id)
+    session = Session()
+    ad = session.query(Advertisement).filter_by(id=ad_id).first()
+    session.close()
+
     if ad is None:
         abort(404)
-    return jsonify(ad)
+
+    return jsonify({
+        'id': ad.id,
+        'title': ad.title,
+        'description': ad.description,
+        'creation_date': ad.creation_date,
+        'owner': ad.owner
+    })
 
 @app.route('/ad/<int:ad_id>', methods=['DELETE'])
 def delete_ad(ad_id):
-    ad = ads_database.pop(ad_id, None)
+    session = Session()
+    ad = session.query(Advertisement).filter_by(id=ad_id).first()
+
     if ad is None:
+        session.close()
         abort(404)
+
+    session.delete(ad)
+    session.commit()
+    session.close()
+
     return jsonify({'result': True})
 
 @app.route('/ad/<int:ad_id>', methods=['PUT'])
 def update_ad(ad_id):
-    if ad_id not in ads_database:
+    session = Session()
+    ad = session.query(Advertisement).filter_by(id=ad_id).first()
+
+    if ad is None:
+        session.close()
         abort(404)
+
     data = request.json
-    ads_database[ad_id].update({
-        'title': data.get('title', ads_database[ad_id]['title']),
-        'description': data.get('description', ads_database[ad_id]['description']),
-        'creation_date': data.get('creation_date', ads_database[ad_id]['creation_date']),
-        'owner': data.get('owner', ads_database[ad_id]['owner'])
+    ad.title = data.get('title', ad.title)
+    ad.description = data.get('description', ad.description)
+    ad.creation_date = data.get('creation_date', ad.creation_date)
+    ad.owner = data.get('owner', ad.owner)
+
+    session.commit()
+    session.close()
+
+    return jsonify({
+        'id': ad.id,
+        'title': ad.title,
+        'description': ad.description,
+        'creation_date': ad.creation_date,
+        'owner': ad.owner
     })
-    return jsonify(ads_database[ad_id])
 
 if __name__ == '__main__':
     app.run(debug=True)
